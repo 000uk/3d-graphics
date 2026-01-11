@@ -11,17 +11,8 @@ from .src.nerf.encoder import PositionalEncoder
 from .src.nerf.nerf import NeRF
 from .src.nerf.rays import get_rays
 from .src.nerf.render import volume_render
-from .src.nerf.sampling import sample_z_vals
+from .src.nerf.sampling import sample_rays, sample_z_vals
 
-'''
-config 에는...
-exp_name:
-seed: 42
-base_dir: '/kaggle/input/nerf-synthetic-dataset/nerf_synthetic/lego'
-lr: 5e-4
-n_iters: 5000 # 학습 횟수 (100번은 너무 적어서 1000번으로 늘림)
-n_samples: 256 # 적분 몇개로 나눠 할건지
-'''
 def main(config, data=None):
     config_path = args.config
     with open(config_path) as f:
@@ -56,29 +47,30 @@ def main(config, data=None):
         """
         # 랜덤으로 이미지 하나랑 그 중에서 n개의 광선 뽑는거임
         img_i = np.random.randint(0, len(datas))
-        target = datas[img_i]["image"].to(device) # (H, W, 3)
+        full_target = datas[img_i]["image"].to(device) # (H, W, 3)
         c2w = datas[img_i]["c2w"].to(device)      # (4, 4)
 
         # 1. Ray Generator
-        rays_o, rays_d = get_rays(H, W, focal, c2w)
+        full_rays_o, full_rays_d = get_rays(H, W, focal, c2w)
+        rays_o, rays_d, target = sample_rays(full_rays_o, full_rays_d, full_target, config["n_rays"])
 
         # 좌표 정의 // 좌표(pts) = 출발점(o) + 거리(z_vals) x 방향(d)
         near, far = 2.0, 6.0
-        z_vals = sample_z_vals(near, far, config["n_samples"], H*W, train=True).to(device)
-        pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None] # (H*W, 64, 3)
+        z_vals = sample_z_vals(near, far, config["n_samples"], config["n_rays"], train=True).to(device)
+        pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None] # (N_rand, 64, 3)
         dirs_expanded = rays_d[..., None, :].expand(pts.shape)
 
         # 2. Positional Encoding
         # MLP는 (B, D) 일케 2차원만 받으니까 flatten 해줘야함
-        encoded_pts = pos_encoder(pts.reshape(-1, 3)) # (H*W*n_samples, 3)
+        encoded_pts = pos_encoder(pts.reshape(-1, 3)) # (n_rays * n_samples, 3)
         encoded_dirs = dir_encoder(dirs_expanded.reshape(-1, 3))
 
         # 3. NeRF Model
-        raw = model(encoded_pts, encoded_dirs) # (H*W*n_samples, 4)
-        raw = raw.reshape(H*W, config["n_samples"], 4) # (H*W, n_samples, 4)
+        raw = model(encoded_pts, encoded_dirs) # (n_rays * n_samples, 4)
+        raw = raw.reshape(config["n_rays"], config["n_samples"], 4) # (n_rays, n_samples, 4)
 
         # 4. Volume Rendering
-        print(z_vals.shape) # H*W, n_samples
+        print(z_vals.shape) # n_rays, n_samples
         rgb = volume_render(raw, z_vals)
         
         loss = F.mse_loss(rgb, target)
