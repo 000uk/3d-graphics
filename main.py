@@ -58,7 +58,7 @@ def main(config_path, data_dir=None):
 
         # 좌표 정의 // 좌표(pts) = 출발점(o) + 거리(z_vals) x 방향(d)
         near, far = 2.0, 6.0
-        z_vals = sample_z_vals(near, far, config["n_samples"], rays_o.shape[0], train=True).to(device)
+        z_vals = sample_z_vals(near, far, config["n_samples"], rays_o.shape[0], train=True)
         pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None] # (N_rand, 64, 3)
         dirs_expanded = rays_d[..., None, :].expand(pts.shape)
 
@@ -101,7 +101,7 @@ def main(config_path, data_dir=None):
                 # =============================================================
                 # 좌표 정의 // 좌표(pts) = 출발점(o) + 거리(z_vals) x 방향(d)
                 near, far = 2.0, 6.0
-                z_vals = sample_z_vals(near, far, config["n_samples"], rays_o.shape[0]).to(device)
+                z_vals = sample_z_vals(near, far, config["n_samples"], rays_o.shape[0])
                 pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None] # (N_rand, 64, 3)
                 dirs_expanded = rays_d[..., None, :].expand(pts.shape)
 
