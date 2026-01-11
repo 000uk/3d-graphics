@@ -40,8 +40,8 @@ def main(config_path, data_dir=None):
     model = NeRF(ch=63, view=27).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
     
+    model.train()
     train_loss = []
-
     for _ in tqdm(range(config["n_iters"]), desc="[Train]"):
         """
         NeRF 학습은 매 step마다 다른 위치(이미지, ray)에서 
@@ -82,16 +82,16 @@ def main(config_path, data_dir=None):
         
         train_loss.append(loss.item())
 
+    model.eval()
     frames = []
-
     with torch.no_grad():
-        poses = get_360_poses(device)
-        for c2w in poses:      
+        poses = get_360_poses(device=device)
+        for c2w in tqdm(poses, desc="[Render]"):
             # 1. Ray Generator
             full_rays_o, full_rays_d = get_rays(H, W, focal, c2w)
             # rays_o, rays_d, _ = sample_rays(full_rays_o, full_rays_d, full_target, config["n_rays"])
 
-            rgb = []
+            all_rgbs = []
             chunk = config["n_rays"]*4
             for i in range(0, H*W, chunk): # H*W = full_rays_o.shape[0]
                 rays_o = full_rays_o.reshape(-1, 3)[i:i+chunk]
@@ -101,7 +101,7 @@ def main(config_path, data_dir=None):
                 # =============================================================
                 # 좌표 정의 // 좌표(pts) = 출발점(o) + 거리(z_vals) x 방향(d)
                 near, far = 2.0, 6.0
-                z_vals = sample_z_vals(near, far, config["n_samples"], rays_o.shape[0], train=True).to(device)
+                z_vals = sample_z_vals(near, far, config["n_samples"], rays_o.shape[0]).to(device)
                 pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None] # (N_rand, 64, 3)
                 dirs_expanded = rays_d[..., None, :].expand(pts.shape)
 
@@ -119,17 +119,13 @@ def main(config_path, data_dir=None):
                 # =============================================================
                 # ===================== 학습 루프랑 똑같음 =====================
                 # =============================================================
-                rgb.append(rgb_chunk)
+                all_rgbs.append(rgb_chunk)
 
-            final_rgb = torch.cat(final_rgb, dim=0) # 다시 이미지 모양으로 합치기
-            final_rgb = final_rgb.reshape(H, W, 3) # flatten해준거 다시 펴주고~
-            
-            img_np = rgb.detach().cpu().numpy()
-            img_np = np.clip(img_np, 0, 1)
-            img_uint8 = (img_np * 255).astype(np.uint8)
-            img_pil = Image.fromarray(img_uint8)
-
-            frames.append(img_pil)
+            rgb = torch.cat(all_rgbs, dim=0) # 다시 이미지 모양으로 합치기
+            rgb = rgb.reshape(H, W, 3)       # flatten해준거 다시 펴주고~
+            rgb = (rgb.clamp(0, 1) * 255).byte().cpu().numpy()
+    
+            frames.append(Image.fromarray(rgb))
             
         # GIF 저장
         frames[0].save(
