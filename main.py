@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import argparse
 import numpy as np
 from tqdm import tqdm
+from PIL import Image
 
 from src.utils import set_seed
 from src.data_loader import load_data
@@ -13,6 +14,7 @@ from src.nerf.nerf import NeRF
 from src.nerf.rays import get_rays
 from src.nerf.render import volume_render
 from src.nerf.sampling import sample_rays, sample_z_vals
+from src.camera import get_360_poses
 
 def main(config_path, data_dir=None):
     with open(config_path) as f:
@@ -56,7 +58,7 @@ def main(config_path, data_dir=None):
 
         # 좌표 정의 // 좌표(pts) = 출발점(o) + 거리(z_vals) x 방향(d)
         near, far = 2.0, 6.0
-        z_vals = sample_z_vals(near, far, config["n_samples"], config["n_rays"], train=True).to(device)
+        z_vals = sample_z_vals(near, far, config["n_samples"], rays_o.shape[0], train=True).to(device)
         pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None] # (N_rand, 64, 3)
         dirs_expanded = rays_d[..., None, :].expand(pts.shape)
 
@@ -67,17 +69,78 @@ def main(config_path, data_dir=None):
 
         # 3. NeRF Model
         raw = model(encoded_pts, encoded_dirs) # (n_rays * n_samples, 4)
-        raw = raw.reshape(config["n_rays"], config["n_samples"], 4) # (n_rays, n_samples, 4)
+        raw = raw.reshape(rays_o.shape[0], config["n_samples"], 4) # (n_rays, n_samples, 4)
 
         # 4. Volume Rendering
         rgb = volume_render(raw, z_vals)
         
         loss = F.mse_loss(rgb, target)
+
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        optimizer.zero_grad()
         
         train_loss.append(loss.item())
+
+    frames = []
+
+    with torch.no_grad():
+        poses = get_360_poses(device)
+        for c2w in poses:      
+            # 1. Ray Generator
+            full_rays_o, full_rays_d = get_rays(H, W, focal, c2w)
+            # rays_o, rays_d, _ = sample_rays(full_rays_o, full_rays_d, full_target, config["n_rays"])
+
+            rgb = []
+            chunk = config["n_rays"]*4
+            for i in range(0, H*W, chunk): # H*W = full_rays_o.shape[0]
+                rays_o = full_rays_o.reshape(-1, 3)[i:i+chunk]
+                rays_d = full_rays_d.reshape(-1, 3)[i:i+chunk]
+                # =============================================================
+                # ===================== 학습 루프랑 똑같음 =====================
+                # =============================================================
+                # 좌표 정의 // 좌표(pts) = 출발점(o) + 거리(z_vals) x 방향(d)
+                near, far = 2.0, 6.0
+                z_vals = sample_z_vals(near, far, config["n_samples"], rays_o.shape[0], train=True).to(device)
+                pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None] # (N_rand, 64, 3)
+                dirs_expanded = rays_d[..., None, :].expand(pts.shape)
+
+                # 2. Positional Encoding
+                # MLP는 (B, D) 일케 2차원만 받으니까 flatten 해줘야함
+                encoded_pts = pos_encoder(pts.reshape(-1, 3)) # (n_rays * n_samples, 3)
+                encoded_dirs = dir_encoder(dirs_expanded.reshape(-1, 3))
+
+                # 3. NeRF Model
+                raw = model(encoded_pts, encoded_dirs) # (n_rays * n_samples, 4)
+                raw = raw.reshape(rays_o.shape[0], config["n_samples"], 4) # (n_rays, n_samples, 4)
+
+                # 4. Volume Rendering
+                rgb_chunk = volume_render(raw, z_vals)
+                # =============================================================
+                # ===================== 학습 루프랑 똑같음 =====================
+                # =============================================================
+                rgb.append(rgb_chunk)
+
+            final_rgb = torch.cat(final_rgb, dim=0) # 다시 이미지 모양으로 합치기
+            final_rgb = final_rgb.reshape(H, W, 3) # flatten해준거 다시 펴주고~
+            
+            img_np = rgb.detach().cpu().numpy()
+            img_np = np.clip(img_np, 0, 1)
+            img_uint8 = (img_np * 255).astype(np.uint8)
+            img_pil = Image.fromarray(img_uint8)
+
+            frames.append(img_pil)
+            
+        # GIF 저장
+        frames[0].save(
+            os.path.join(save_dir,"result.gif"),
+            save_all=True,
+            append_images=frames[1:],
+            optimize=False,
+            duration=100,
+            loop=0
+        )
+        print(f"\n✨ 저장 완료! {save_dir}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
