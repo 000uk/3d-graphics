@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 import argparse
 import numpy as np
+from tqdm import tqdm
 
 from src.utils import set_seed
 from src.data_loader import load_data
@@ -13,8 +14,7 @@ from src.nerf.rays import get_rays
 from src.nerf.render import volume_render
 from src.nerf.sampling import sample_rays, sample_z_vals
 
-def main(config, data=None):
-    config_path = args.config
+def main(config_path, data_dir=None):
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
@@ -28,7 +28,7 @@ def main(config, data=None):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    base_dir = data if data else config["base_dir"] 
+    base_dir = data_dir or config["base_dir"]
     datas = load_data(base_dir)
     H, W, focal = datas[0]["hwf"]
     H, W = int(H), int(W)
@@ -40,7 +40,7 @@ def main(config, data=None):
     
     train_loss = []
 
-    for _ in range(config["iters"]):
+    for _ in tqdm(range(config["n_iters"]), desc="[Train]"):
         """
         NeRF 학습은 매 step마다 다른 위치(이미지, ray)에서 
         레이저를 쏴보면서 공간 전체를 스캔하는 과정임!!
@@ -70,7 +70,6 @@ def main(config, data=None):
         raw = raw.reshape(config["n_rays"], config["n_samples"], 4) # (n_rays, n_samples, 4)
 
         # 4. Volume Rendering
-        print(z_vals.shape) # n_rays, n_samples
         rgb = volume_render(raw, z_vals)
         
         loss = F.mse_loss(rgb, target)
