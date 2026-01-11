@@ -1,5 +1,15 @@
 import torch
 
+def sample_rays(rays_o, rays_d, target, n_rand):
+    """
+    아니 전체(H, W) rays로 학습하니까 메모리 터지네;;
+    batch 뽑듯 몇개씩만 뽑아서 학습하자
+    """
+    H, W = rays_o.shape[:2]
+    i = torch.randint(0, H, (n_rand,))
+    j = torch.randint(0, W, (n_rand,))
+    return rays_o[i, j], rays_d[i, j], target[i, j]
+
 def sample_z_vals(near, far, n_samples, n_rays, train=False):
     """"
     z_vals sampling
