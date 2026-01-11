@@ -2,7 +2,7 @@
 import torch
 import torch.nn.Functional as F
 
-def render(raw, z_vals):
+def volume_render(raw, z_vals):
     # color = torch.zeros(3) # RGB (0, 0, 0) 배경은 검정색
     # T = 1.0 # 투과율
     # for i in range(len(raw)):
