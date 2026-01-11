@@ -56,16 +56,17 @@ def main(config, data=None):
         """
         # 랜덤으로 이미지 하나랑 그 중에서 n개의 광선 뽑는거임
         img_i = np.random.randint(0, len(datas))
-        target = datas[img_i]["image"].to(device) # (H, W, 3)
+        full_target = datas[img_i]["image"].to(device) # (H, W, 3)
         c2w = datas[img_i]["c2w"].to(device)      # (4, 4)
 
         # 1. Ray Generator
-        rays_o, rays_d = get_rays(H, W, focal, c2w)
+        full_rays_o, full_rays_d = get_rays(H, W, focal, c2w)
+        rays_o, rays_d, target = sample_rays(full_rays_o, full_rays_d, full_target, config["n_rays"])
 
         # 좌표 정의 // 좌표(pts) = 출발점(o) + 거리(z_vals) x 방향(d)
         near, far = 2.0, 6.0
-        z_vals = sample_z_vals(near, far, config["n_samples"], H*W, train=True).to(device)
         pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None] # (H*W, 64, 3)
+        z_vals = sample_z_vals(near, far, config["n_samples"], config["n_rays"], train=True).to(device)
         dirs_expanded = rays_d[..., None, :].expand(pts.shape)
 
         # 2. Positional Encoding
@@ -75,7 +76,7 @@ def main(config, data=None):
 
         # 3. NeRF Model
         raw = model(encoded_pts, encoded_dirs) # (H*W*n_samples, 4)
-        raw = raw.reshape(H*W, config["n_samples"], 4) # (H*W, n_samples, 4)
+        raw = raw.reshape(config["n_rays"], config["n_samples"], 4) # (n_rays, n_samples, 4)
 
         # 4. Volume Rendering
         print(z_vals.shape) # H*W, n_samples
