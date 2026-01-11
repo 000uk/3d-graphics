@@ -5,13 +5,13 @@ import torch.nn.functional as F
 import argparse
 import numpy as np
 
-from .src.utils import set_seed
-from .src.data_loader import load_data
-from .src.nerf.encoder import PositionalEncoder
-from .src.nerf.nerf import NeRF
-from .src.nerf.rays import get_rays
-from .src.nerf.render import volume_render
-from .src.nerf.sampling import sample_rays, sample_z_vals
+from src.utils import set_seed
+from src.data_loader import load_data
+from src.nerf.encoder import PositionalEncoder
+from src.nerf.nerf import NeRF
+from src.nerf.rays import get_rays
+from src.nerf.render import volume_render
+from src.nerf.sampling import sample_rays, sample_z_vals
 
 def main(config, data=None):
     config_path = args.config
