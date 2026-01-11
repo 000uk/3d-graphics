@@ -1,6 +1,6 @@
 # 4. Volume Rendering
 import torch
-import torch.nn.Functional as F
+import torch.nn.functional as F
 
 def volume_render(raw, z_vals):
     # color = torch.zeros(3) # RGB (0, 0, 0) 배경은 검정색
