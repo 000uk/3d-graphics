@@ -10,7 +10,7 @@ class GaussianModel(nn.Module):
         # 원래는 SfM 돌린거 point 가져와서 하겠는데.. 일단은 랜덤으로 해보자 생성형 모델 할때도 좋겠고 뭐
         self.xyz = nn.Parameter(torch.rand(num_points, 3) * 2 - 1) # 0~1 -> -1~1
         
-        # Σ = (RS)(RS)^{T} 용
+        # Σ = (RS)(RS)ᵀ 용
         self.scale = nn.Parameter(torch.rand(num_points, 3) - 3.0) # S: 스케일
         self.rot_quat = nn.Parameter(torch.rand(num_points, 4)) # R: 쿼터니언 (w, x, y, z)
 
