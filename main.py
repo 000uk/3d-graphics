@@ -6,10 +6,11 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
+import matplotlib.pyplot as plt
 
 from src.utils import set_seed
 from src.data_loader import load_data
-from src.nerf.nerf import NeRF
+from src.nerf.nerf import NeRF_Model
 from src.nerf.rays import get_rays
 from src.nerf.sampling import sample_rays
 from src.runner import run_nerf
@@ -29,12 +30,19 @@ def main(config_path, data_dir=None):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    base_dir = data_dir or config["base_dir"]
-    datas = load_data(base_dir)
+    datas = load_data(data_dir or config["data_dir"])
     H, W, focal = datas[0]["hwf"]
     H, W = int(H), int(W)
 
-    model = NeRF(ch=63, view=27).to(device)
+    """
+    최종 목표는.. 
+    for: loss = train()
+    for: frames = render()
+    이렇게 되도록 추상화하기!
+
+    그래야 NeRF도 실험하고 3DGS도 실험하고 그러지
+    """
+    model = NeRF_Model(ch=63, view=27).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
     
     model.train()
@@ -67,9 +75,9 @@ def main(config_path, data_dir=None):
     model.eval()
     frames = []
     with torch.no_grad():
-        poses = get_360_poses(device=device)
+        poses = get_360_poses(n_frames=30, device=device)
         for c2w in tqdm(poses, desc="[Render]"):
-            all_rgbs = []
+            rgb_pred = []
 
             full_rays_o, full_rays_d = get_rays(H, W, focal, c2w)
 
@@ -80,24 +88,35 @@ def main(config_path, data_dir=None):
 
                 rgb_chunk = run_nerf(model, rays_o, rays_d, config["n_samples"], train=False)
 
-                all_rgbs.append(rgb_chunk)
+                rgb_pred.append(rgb_chunk)
 
-            rgb = torch.cat(all_rgbs, dim=0) # 다시 이미지 모양으로 합치기
+            # chunk 땜에 짤렸을 수도 있어서 원래 이미지 모양으로 합쳐
+            rgb = torch.cat(rgb_pred, dim=0)
             rgb = rgb.reshape(H, W, 3)       # flatten해준거 다시 펴주고~!!
             rgb = (rgb.clamp(0, 1) * 255).byte().cpu().numpy()
     
             frames.append(Image.fromarray(rgb))
-            
-        # GIF 저장
-        frames[0].save(
-            os.path.join(save_dir,"result.gif"),
-            save_all=True,
-            append_images=frames[1:],
-            optimize=False,
-            duration=100,
-            loop=0
-        )
-        print(f"\n✨ 저장 완료! {save_dir}")
+
+    plt.plot(train_loss)
+    plt.xlabel('Iterations')
+    plt.ylabel('MSE Loss')
+    plt.title('NeRF Training Loss')
+    plt.grid(True, alpha=0.5) # 격자 추가 (보기 편함)
+    plt.savefig(
+        os.path.join(save_dir, f"loss_graph.jpg"),
+        dpi=300
+    )
+    plt.close()
+    
+    # GIF 저장
+    frames[0].save(
+        os.path.join(save_dir,"result.gif"),
+        save_all=True,
+        append_images=frames[1:],
+        optimize=False,
+        duration=100,
+        loop=0
+    )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
