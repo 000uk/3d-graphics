@@ -1,0 +1,9 @@
+base_dir: data/meta.csv
+exp_name: nerf-e2
+seed: 42
+lr: 0.0005
+n_iters: 5000
+n_rays: 8192
+n_samples: 128
+chunks: 10240
+n_frame: 30

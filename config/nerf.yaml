@@ -1,4 +1,4 @@
-exp_name: NeRF-exp-2
+exp_name: nerf-e2
 seed: 42
 data_dir: data/meta.csv
 lr: 0.0005
@@ -6,3 +6,4 @@ n_iters: 5000 # 학습 횟수 (100번은 너무 적어서 1000번으로 늘림)
 n_rays: 8192 # 한 번에 학습할 광선의 개수 (배치사이즈 느낌)
 n_samples: 128 # 적분 몇개로 나눠 할건지 (디테일 향상)
 chunks: 10240
+n_frame: 30

@@ -75,7 +75,7 @@ def main(config_path, data_dir=None):
     model.eval()
     frames = []
     with torch.no_grad():
-        poses = get_360_poses(n_frames=30, device=device)
+        poses = get_360_poses(n_frames=config["n_frames"], device=device)
         for c2w in tqdm(poses, desc="[Render]"):
             rgb_pred = []
 
