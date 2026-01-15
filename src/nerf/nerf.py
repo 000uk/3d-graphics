@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-class NeRF_Model(nn.Module):
+class NeRF(nn.Module):
     def __init__(self, ch=60, view=24, dim=256):
         super().__init__()
 

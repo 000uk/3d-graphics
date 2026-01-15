@@ -21,10 +21,11 @@ def volume_render(raw, z_vals):
     raw: (n_rays, n_samples, 4) // r,g,b,sigma
     z_vals: (n_rays, n_samples)
     """
-    T = torch.ones(z_vals.shape[0]).to(raw.device) # 각 ray의 첫번째 투과율은 1로 초기화
+    T = torch.ones(z_vals.shape[0]).to(z_vals.device) # 각 ray의 첫번째 투과율은 1로 초기화
 
     rgb = torch.sigmoid(raw[..., :3]) # rgb는 0~1 사이
-    sigma = F.relu(raw[..., 3]) # sigma는 양수
+    # sigma = F.relu(raw[..., 3]) # sigma는 양수
+    sigma = F.softplus(raw[..., 3]) # sigma는 양수여야 하는데 fine 학습 안되길래 이걸로 해봄
 
     dists = z_vals[..., 1:] - z_vals[..., :-1] # 다음 점 - 현재 점
     last = torch.ones_like(dists[..., :1]) * 1e10 # 마지막 점은 뒤가 무한대라고 가정
@@ -39,4 +40,4 @@ def volume_render(raw, z_vals):
     weights = alpha * T
     rgb_map = torch.sum(weights.unsqueeze(-1) * rgb, dim=-2) # n_sample이 dt니까!! dim=-2를 sum
 
-    return rgb_map # (n_rays, 3)
+    return rgb_map, weights # (n_rays, 3)
